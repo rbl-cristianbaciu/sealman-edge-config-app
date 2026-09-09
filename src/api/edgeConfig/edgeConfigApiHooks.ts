@@ -35,6 +35,64 @@ export interface DeviceData {
   vpn: string;
 }
 
+export interface ExtensionUpstream {
+  extension_name: string;
+  key: string;
+  type: "http" | "iotedge";
+  base_url?: string | null;
+  module_name?: string | null;
+  expected_version?: string | null;
+  health_path?: string | null;
+  version_field?: string | null;
+  version_source?: string | null;
+  twin_version_property?: string | null;
+  health_method?: string | null;
+  created_at?: string | null;
+}
+
+export interface ExtensionSummary {
+  name: string;
+  description: string;
+  internal_key_hash: string | null;
+  created_at: string | null;
+}
+
+export interface ExtensionRoute {
+  id: string;
+  extension_name: string;
+  upstream: string;
+  path: string;
+  method: string;
+  upstream_path: string | null;
+  method_name: string | null;
+  iotedge_operation: string;
+  required_action: string | null;
+  visibility: "public" | "internal" | "device";
+  scoped: boolean;
+  scope_param: string;
+  scope_in: "path" | "query";
+  query_params: unknown[];
+  body: unknown;
+  summary: string | null;
+  description: string | null;
+}
+
+export interface ExtensionDetails extends ExtensionSummary {
+  upstreams: ExtensionUpstream[];
+  routes: ExtensionRoute[];
+}
+
+export interface ExtensionDeviceKey {
+  device_id: string;
+  module_id: string | null;
+  created_at: string | null;
+}
+
+export interface IssuedDeviceKey {
+  device_id: string;
+  device_key: string;
+}
+
 type ScopeDetailsResponse = components["schemas"]["ScopeDetailsResponse"];
 type ScopeWritePayload = {
   name: string;
@@ -405,6 +463,58 @@ const useGetUserTeamAssignments = (userId: string | undefined, enabled = true) =
     enabled: Boolean(userId) && enabled,
   });
 
+const useGetExtensions = () =>
+  useQuery<ExtensionSummary[], AxiosError>({
+    queryKey: ["extensions"],
+    queryFn: () => edgeConfigApi.getExtensions(),
+  });
+
+const useGetExtensionDetails = (name: string | undefined, enabled = true) =>
+  useQuery<ExtensionDetails, AxiosError>({
+    queryKey: ["extensionDetails", name],
+    queryFn: () => edgeConfigApi.getExtensionDetails(name ?? ""),
+    enabled: Boolean(name) && enabled,
+  });
+
+const useDeregisterExtension = () =>
+  useMutation<unknown, AxiosError, string>({
+    mutationFn: (name: string) => edgeConfigApi.deregisterExtension(name),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["extensions"] });
+    },
+  });
+
+const useListDeviceKeys = (name: string | undefined, enabled = true) =>
+  useQuery<ExtensionDeviceKey[], AxiosError>({
+    queryKey: ["extensionDeviceKeys", name],
+    queryFn: () => edgeConfigApi.listDeviceKeys(name ?? ""),
+    enabled: Boolean(name) && enabled,
+  });
+
+const useIssueDeviceKey = (name: string) =>
+  useMutation<IssuedDeviceKey, AxiosError, { deviceId: string; moduleId?: string }>({
+    mutationFn: ({ deviceId, moduleId }) => edgeConfigApi.issueDeviceKey(name, deviceId, moduleId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["extensionDeviceKeys", name] });
+    },
+  });
+
+const useRevokeDeviceKey = (name: string) =>
+  useMutation<unknown, AxiosError, string>({
+    mutationFn: (deviceId: string) => edgeConfigApi.revokeDeviceKey(name, deviceId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["extensionDeviceKeys", name] });
+    },
+  });
+
+const useRegisterExtension = () =>
+  useMutation<unknown, AxiosError, unknown>({
+    mutationFn: (payload) => edgeConfigApi.registerExtension(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["extensions"] });
+    },
+  });
+
 export const edgeConfigApiHooks = {
   useGetDevice,
   useGetSmartEmsInfo,
@@ -437,4 +547,11 @@ export const edgeConfigApiHooks = {
   useAddUserToTeam,
   useRemoveUserFromTeam,
   useGetUserTeamAssignments,
+  useGetExtensions,
+  useGetExtensionDetails,
+  useDeregisterExtension,
+  useListDeviceKeys,
+  useIssueDeviceKey,
+  useRevokeDeviceKey,
+  useRegisterExtension,
 }
